@@ -1,0 +1,75 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(tidyMB)
+library(vegan)
+library(broom)
+```
+
+```{r}
+b_data <- readRDS("~/Brachy/SelectionExperiment/Analysis/brachy_data.rds")
+```
+
+```{r}
+bPC <- tidy_pcoa(b_data %>% select(SampleID, Generation, PlantID, Experiment, CollectionStage, Pressure, Presence, SoilType, otu, Log2RA, Run), value = "Log2RA", , dist = "bray", otus = "otu")
+
+bPC$axes %>% 
+  ggplot(aes(x = MDS1, MDS2, color = Run)) +
+  geom_point()
+```
+
+```{r}
+phy.counts <- b_data %>% 
+  group_by(Family) %>% 
+  nest() %>% 
+  mutate(total = map_dbl(data, ~sum(.x$RA))) %>% 
+  arrange(-total) %>% 
+  head(20) %>% 
+  unnest() %>% 
+  group_by(SampleID, Family) %>% 
+  summarise(total = sum(RA))
+
+bPC$axes %>% 
+  inner_join(phy.counts, by = "SampleID") %>% 
+  group_by(Family) %>% 
+  nest() %>% 
+  mutate(mod = map(data, ~lm(MDS1 ~ total, .))) %>% 
+  unnest(map(mod, ~tidy(.))) %>% 
+  filter(term != "(Intercept)") %>% 
+  mutate(p.adj = p.adjust(p.value, "bon")) %>% 
+  arrange(p.adj)
+
+
+```
+```{r}
+bPC$axes %>% 
+  inner_join(phy.counts, by = "SampleID") %>%
+  group_by(Family) %>% 
+  mutate(scaled = (total - min(total)) / (max(total) - min(total))) %>% 
+  ggplot(aes(MDS1, MDS2, color = scaled)) +
+  geom_point() +
+  facet_wrap(~Family) +
+  scale_color_gradientn(colours = c("black", "red"))
+```
+
+```{r}
+tab <- readRDS("~/Brachy/SelectionExperiment/asv_table.rds")
+tax <- readRDS("~/Brachy/SelectionExperiment/asv_tax.rds")
+organelle <- tax %>% 
+  filter(Family == "Mitochondria" | Order == "Chloroplast")
+tab2 <- tab[,!colnames(tab)%in%organelle$otu]
+RA <- (tab2 / rowSums(tab2)) * 1000
+```
+
+```{r}
+cp <- capscale(log2(RA + 1) ~ 1)
+cp_axes <- cp$CA$u
+cp_axes <- cbind(map_data[match(row.names(cp_axes), map_data$SampleID),], cp_axes)
+ggplot(cp_axes, aes(MDS1, MDS2, color = Pressure)) +
+  geom_point()
+```
+

@@ -1,0 +1,68 @@
+---
+title: "Brachy Microbiome Clean Up"
+output: html_notebook
+author: "Joe Edwards"
+---
+
+```{r}
+library(tidyverse)
+library(tidyMB)
+```
+
+```{r}
+otu.table <- as.data.frame(t(readRDS("~/Brachy/SelectionExperiment/asv_table.rds")))
+otu.table$OTUID <- row.names(otu.table)
+tax <- readRDS("~/Brachy/SelectionExperiment/asv_tax.rds")
+```
+
+```{r}
+map_1 <- read.table("~/Brachy/SelectionExperiment/Brarhiitagpl1/mapping.tsv") %>% mutate(Run = "Run1")
+map_2 <- read.table("~/Brachy/SelectionExperiment/Brarhiitagpl2/mapping.tsv") %>% mutate(Run = "Run2")
+map_3 <- read.table("~/Brachy/SelectionExperiment/Brarhiitagpl3/mapping.tsv") %>% mutate(Run = "Run3")
+map_4 <- read.table("~/Brachy/SelectionExperiment/Brarhiitagpl4/mapping.tsv") %>% mutate(Run = "Run4")
+
+map <- bind_rows(map_1, map_2, map_3, map_4)
+map$V2 <- gsub("\\.fastq\\.gz", "", map$V2)
+map_data <- map %>% 
+  separate(V1, sep = "(?<=G[0-9])", into = c("Generation", "V1"), perl = T) %>% 
+  separate(V1, sep = "(?<=M[0-9][0-9][0-9])", into = c("PlantID", "V1"), perl = T) %>% 
+  separate(V1, sep = "(?<=Ex[0-9])", into = c("Experiment", "V1"), perl = T) %>% 
+  separate(V1, sep = "(?<=P[or])", into = c("CollectionStage", "V1"), perl = T) %>% 
+  separate(V1, sep = "(?<=[AS])", into = c("Pressure", "V1"), perl = T) %>% 
+  separate(V1, sep = "(?<=[NP]p[0-9])", into = c("Presence", "SoilType"), perl = T) %>% 
+  rename(SampleID = V2)
+```
+
+```{r}
+b_data <- otu.table %>%
+  gather(SampleID, value, -OTUID) %>% rename(otu = OTUID) %>% 
+  inner_join(map_data, by = "SampleID") %>% 
+  inner_join(tax %>% select(-seq), by = "otu") %>% 
+  filter(Family != "Mitochondria" & Order != "Chloroplast") %>% 
+  group_by(SampleID) %>% 
+  mutate(depth = sum(value)) %>% 
+  mutate(RA = 1000 * (value / depth), Log2RA = log2(RA + 1)) %>% 
+  group_by(otu) %>% 
+  mutate(prevalence = sum(value > 0) / n()) %>% 
+  filter(prevalence >= 0.05) %>% 
+  filter(depth >= 1000)
+```
+
+
+```{r}
+write_rds(b_data, "~/Brachy/SelectionExperiment/Analysis/brachy_data.rds")
+write_rds(map_data, "~/Brachy/SelectionExperiment/Analysis/brachy_map.rds")
+```
+
+```{r}
+b_data %>% 
+  mutate(Phylum2 = ifelse(Phylum == "Proteobacteria", as.character(Class), as.character(Phylum))) %>% 
+  group_by(Phylum2) %>% 
+  nest() %>% 
+  mutate(total = map_dbl(data, ~sum(.x$RA))) %>% 
+  arrange(-total) %>% 
+  head(10) %>% 
+  unnest() %>% 
+  group_by(Phylum2, SampleID, )
+```
+
