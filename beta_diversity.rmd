@@ -20,6 +20,10 @@ bPC <- tidy_pcoa(b_data %>% mutate(depth = as.character(depth)) %>%  select(Samp
 bPC$axes %>% 
   ggplot(aes(x = MDS1, MDS2, color = Run)) +
   geom_point()
+
+bPC$axes %>% 
+  ggplot(aes(x = MDS1, MDS2, color = gsub("[0-9]", "", Presence))) +
+  geom_point()
 ```
 
 ```{r}
