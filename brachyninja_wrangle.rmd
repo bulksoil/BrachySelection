@@ -1,0 +1,82 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(tidyMB)
+```
+
+
+```{r}
+otu.table <- read_tsv("~/Brachy/SelectionExperiment/trimmed/ninja/brachy_otu_table.tsv")
+otu.table$OTUID <- row.names(otu.table)
+tax <- readRDS("~/Reference/gg_otus_tax.rds")
+```
+
+```{r}
+map_1 <- read.table("~/Brachy/SelectionExperiment/Brarhiitagpl1/mapping.tsv") %>% mutate(Run = "Run1")
+map_2 <- read.table("~/Brachy/SelectionExperiment/Brarhiitagpl2/mapping.tsv") %>% mutate(Run = "Run2")
+map_3 <- read.table("~/Brachy/SelectionExperiment/Brarhiitagpl3/mapping.tsv") %>% mutate(Run = "Run3")
+map_4 <- read.table("~/Brachy/SelectionExperiment/Brarhiitagpl4/mapping.tsv") %>% mutate(Run = "Run4")
+
+map <- bind_rows(map_1, map_2, map_3, map_4)
+map$V2 <- gsub("\\.fastq\\.gz", "", map$V2)
+map_data <- map %>% 
+  separate(V1, sep = "(?<=G[0-9])", into = c("Generation", "V1"), perl = T) %>% 
+  separate(V1, sep = "(?<=M[0-9][0-9][0-9])", into = c("PlantID", "V1"), perl = T) %>% 
+  separate(V1, sep = "(?<=Ex[0-9])", into = c("Experiment", "V1"), perl = T) %>% 
+  separate(V1, sep = "(?<=P[or])", into = c("CollectionStage", "V1"), perl = T) %>% 
+  separate(V1, sep = "(?<=[AS])", into = c("Pressure", "V1"), perl = T) %>% 
+  separate(V1, sep = "(?<=[NP]p[0-9])", into = c("Presence", "SoilType"), perl = T) %>% 
+  rename(SampleID = V2)
+```
+
+```{r}
+b_n_data <- otu.table %>% 
+  gather(SampleID, value, -OTUID) %>% 
+  rename(variable = OTUID) %>% 
+  mutate(variable = factor(as.character(variable))) %>% 
+  inner_join(map_data, by = "SampleID") %>% 
+  inner_join(tax, by = "variable") %>% 
+  filter(Family != "mitochondria" & Class != "Chloroplast") %>% 
+  group_by(SampleID) %>% 
+  mutate(depth = sum(value)) %>% 
+  group_by(variable) %>% 
+  mutate(RA = (value / depth) * 1000, prevalence = sum(value > 0) / n(), Log2RA = log2(RA + 1))
+```
+
+```{r}
+b_n_data %>% 
+  ungroup() %>% 
+  dplyr::select(Run, SampleID, depth) %>% 
+  distinct() %>% 
+  mutate(colorz = paste(Run)) %>% 
+  ggplot(., aes(x = depth, fill = colorz)) +
+  geom_histogram() +
+  scale_x_log10() +
+  facet_grid(.~Run)
+```
+
+```{r}
+b_n_data %>% 
+  filter(depth > 1000) %>% 
+  mutate(discard = ifelse(prevalence >= 0.025, "Keep", "Discard")) %>% 
+  group_by(variable, prevalence, discard) %>% 
+  summarise(mean_ab = mean(RA)) %>%
+  ggplot(aes(x = mean_ab, y = prevalence, color = discard)) +
+  geom_point(alpha = 0.2) +
+  scale_color_manual(values = c("red", "black")) +
+  scale_x_log10() +
+  theme_minimal()
+```
+
+```{r}
+b_n_data <- b_n_data %>% 
+  filter(depth > 1000) %>% 
+  mutate(discard = ifelse(prevalence >= 0.025, "Keep", "Discard")) %>% 
+  filter(discard == "Keep")
+saveRDS(b_n_data, file = "~/Brachy/SelectionExperiment/Analysis/brachy_ninja_data.rds")
+```
+

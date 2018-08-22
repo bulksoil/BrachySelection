@@ -15,12 +15,21 @@ b_data <- readRDS("~/Brachy/SelectionExperiment/Analysis/brachy_data.rds")
 ```
 
 ```{r}
-bPC <- tidy_pcoa(b_data %>% select(SampleID, Generation, PlantID, Experiment, CollectionStage, Pressure, Presence, SoilType, otu, Log2RA, Run), value = "Log2RA", , dist = "bray", otus = "otu")
+bPC <- tidy_pcoa(b_data %>% mutate(depth = as.character(depth)) %>%  select(SampleID, Generation, PlantID, Experiment, CollectionStage, Pressure, Presence, SoilType, otu, Log2RA, Run, depth), value = "Log2RA", , dist = "bray", otus = "otu")
 
 bPC$axes %>% 
   ggplot(aes(x = MDS1, MDS2, color = Run)) +
   geom_point()
 ```
+
+```{r}
+bPC$axes %>% 
+  mutate(depth = as.numeric(depth)) %>% 
+  ggplot(aes(MDS1, MDS2, color = log(depth))) +
+  geom_point() +
+  scale_color_gradientn(colours = c("green", "black", "red"))
+```
+
 
 ```{r}
 phy.counts <- b_data %>% 
@@ -69,7 +78,7 @@ RA <- (tab2 / rowSums(tab2)) * 1000
 cp <- capscale(log2(RA + 1) ~ 1)
 cp_axes <- cp$CA$u
 cp_axes <- cbind(map_data[match(row.names(cp_axes), map_data$SampleID),], cp_axes)
-ggplot(cp_axes, aes(MDS1, MDS2, color = Pressure)) +
+ggplot(cp_axes, aes(MDS1, MDS2, color = Run)) +
   geom_point()
 ```
 

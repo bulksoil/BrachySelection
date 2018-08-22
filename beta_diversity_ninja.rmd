@@ -1,0 +1,66 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(tidyMB)
+library(vegan)
+library(broom)
+```
+
+```{r}
+b_n_data <- readRDS("~/Brachy/SelectionExperiment/Analysis/brachy_ninja_data.rds")
+```
+
+```{r}
+bPC <- tidy_pcoa(b_n_data %>% mutate(depth = as.character(depth)) %>%  select(SampleID, Generation, PlantID, Experiment, CollectionStage, Pressure, Presence, SoilType, variable, Log2RA, Run, depth), value = "Log2RA", , dist = "bray", otus = "variable")
+
+bPC$axes %>% 
+  ggplot(aes(x = MDS1, MDS2, color = Run)) +
+  geom_point()
+bPC$axes %>% 
+  ggplot(aes(x = MDS1, MDS2, color = gsub("[0-9]", "", Presence))) +
+  geom_point()
+```
+
+```{r}
+phy.counts <- b_n_data %>% 
+  group_by(Family) %>% 
+  nest() %>% 
+  mutate(total = map_dbl(data, ~sum(.x$RA))) %>% 
+  arrange(-total) %>% 
+  head(20) %>% 
+  unnest() %>% 
+  group_by(SampleID, Family) %>% 
+  summarise(total = sum(RA))
+
+bPC$axes %>% 
+  inner_join(phy.counts, by = "SampleID") %>% 
+  group_by(Family) %>% 
+  nest() %>% 
+  mutate(mod = map(data, ~lm(MDS1 ~ total, .))) %>% 
+  unnest(map(mod, ~tidy(.))) %>% 
+  filter(term != "(Intercept)") %>% 
+  mutate(p.adj = p.adjust(p.value, "bon")) %>% 
+  arrange(p.adj)
+```
+```{r}
+bPC$axes %>% 
+  inner_join(phy.counts, by = "SampleID") %>%
+  group_by(Family) %>% 
+  mutate(scaled = (total - min(total)) / (max(total) - min(total))) %>% 
+  ggplot(aes(MDS1, MDS2, color = scaled)) +
+  geom_point() +
+  facet_wrap(~Family) +
+  scale_color_gradientn(colours = c("black", "red"))
+```
+
+
+

@@ -10,9 +10,9 @@ library(tidyMB)
 ```
 
 ```{r}
-otu.table <- as.data.frame(t(readRDS("~/Brachy/SelectionExperiment/asv_table.rds")))
+otu.table <- as.data.frame(t(readRDS("~/Brachy/SelectionExperiment/Analysis/asv_table.rds")))
 otu.table$OTUID <- row.names(otu.table)
-tax <- readRDS("~/Brachy/SelectionExperiment/asv_tax.rds")
+tax <- readRDS("~/Brachy/SelectionExperiment/Analysis/asv_tax.rds")
 ```
 
 ```{r}
@@ -44,13 +44,24 @@ b_data <- otu.table %>%
   mutate(RA = 1000 * (value / depth), Log2RA = log2(RA + 1)) %>% 
   group_by(otu) %>% 
   mutate(prevalence = sum(value > 0) / n()) %>% 
-  filter(prevalence >= 0.05) %>% 
   filter(depth >= 1000)
 ```
 
+```{r}
+b_data %>% 
+  filter(depth > 1000) %>% 
+  mutate(discard = ifelse(prevalence >= 0.01, "Keep", "Discard")) %>% 
+  group_by(otu, prevalence, discard) %>% 
+  summarise(mean_ab = mean(RA)) %>%
+  ggplot(aes(x = mean_ab, y = prevalence, color = discard)) +
+  geom_point(alpha = 0.2) +
+  scale_color_manual(values = c("red", "black")) +
+  scale_x_log10() +
+  theme_minimal()
+```
 
 ```{r}
-write_rds(b_data, "~/Brachy/SelectionExperiment/Analysis/brachy_data.rds")
+write_rds(b_data %>% filter(prevalence >= 0.01), "~/Brachy/SelectionExperiment/Analysis/brachy_data.rds")
 write_rds(map_data, "~/Brachy/SelectionExperiment/Analysis/brachy_map.rds")
 ```
 
