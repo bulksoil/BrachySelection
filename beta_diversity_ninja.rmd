@@ -13,6 +13,7 @@ library(tidyverse)
 library(tidyMB)
 library(vegan)
 library(broom)
+library(ggrepel)
 ```
 
 ```{r}
@@ -20,14 +21,16 @@ b_n_data <- readRDS("~/Brachy/SelectionExperiment/Analysis/brachy_ninja_data.rds
 ```
 
 ```{r}
-bPC <- tidy_pcoa(b_n_data %>% mutate(depth = as.character(depth)) %>%  select(SampleID, Generation, PlantID, Experiment, CollectionStage, Pressure, Presence, SoilType, variable, Log2RA, Run, depth), value = "Log2RA", , dist = "bray", otus = "variable")
+bPC <- tidy_pcoa(b_n_data %>% mutate(depth = as.character(depth)) %>%  select(SampleID, Generation, PlantID, Experiment, CollectionStage, Pressure, Presence, SoilType, variable, Log2RA, Run, depth) %>% filter(Generation != "G9" & Generation != "G5" & CollectionStage != "Pr"), value = "Log2RA", , dist = "bray", otus = "variable")
 
 bPC$axes %>% 
   ggplot(aes(x = MDS1, MDS2, color = Run)) +
   geom_point()
 bPC$axes %>% 
-  ggplot(aes(x = MDS1, MDS2, color = gsub("[0-9]", "", Presence))) +
-  geom_point()
+  filter(depth > 10000) %>% 
+  ggplot(aes(x = MDS1, MDS2, color = Generation)) +
+  geom_point() +
+  facet_grid(Pressure~gsub("[0-9]", "", Presence))
 ```
 
 ```{r}
@@ -63,4 +66,26 @@ bPC$axes %>%
 ```
 
 
+```{r}
+phy.counts <- b_n_data %>% 
+  group_by(Family) %>% 
+  nest() %>% 
+  mutate(total = map_dbl(data, ~sum(.x$RA))) %>% 
+  arrange(-total) %>% 
+  head(10) %>% 
+  unnest() %>% 
+  group_by(SampleID, Family, depth, Generation, PlantID, CollectionStage, Pressure, Presence, SoilType, Run) %>% 
+  summarise(total = sum(RA)) %>% 
+  group_by(SampleID, Presence2 = gsub("[0-9]", "", Presence), Pressure, Generation) %>% 
+  nest() %>% 
+  group_by(Generation, Pressure, Presence2) %>% 
+  mutate(space = 1:n()) %>% 
+  unnest()
+
+phy.counts %>% 
+  na.omit() %>% 
+  ggplot(aes(space, total, fill = Family)) +
+  geom_bar(stat = "identity") +
+  facet_grid(Pressure ~ gsub("[0-9]", "", Presence) + Generation, space = "free", scales = "free_x")
+```
 
